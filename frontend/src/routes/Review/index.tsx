@@ -14,6 +14,11 @@ import KubernetesRequestActions from "./KubernetesRequestActions";
 import KubernetesRequestDisplay from "./KubernetesRequestDisplay";
 import ProxyConnectionCard from "./ProxyConnectionCard";
 import RequestSidebar from "./RequestSidebar";
+import { useTableWarnings } from "../../hooks/tableWarnings";
+import {
+  TableWarningList,
+  TableWarningUnknown,
+} from "../../components/TableWarnings";
 
 interface RequestReviewParams {
   requestId: string;
@@ -63,9 +68,24 @@ function RequestReviewContent() {
   const access =
     request && temporary ? sessionAccess(request, liveEvents, now) : undefined;
 
-  const run = async (explain?: boolean, dryRun?: boolean) => {
-    await execute(explain || false, dryRun || false);
+  const run = async (
+    explain?: boolean,
+    dryRun?: boolean,
+    acknowledgedTables?: string[],
+  ) => {
+    await execute(explain || false, dryRun || false, acknowledgedTables || []);
   };
+
+  // Shown to reviewers as well as the executor: the person approving a statement is the one best
+  // placed to catch a write to a table that is mirrored elsewhere.
+  const statementUnderReview =
+    request?._type === "DATASOURCE" && request.type === "SingleExecution"
+      ? (request.statement ?? undefined)
+      : undefined;
+  const tableWarnings = useTableWarnings(
+    request?.connection?.id,
+    statementUnderReview,
+  );
 
   return (
     <div>
@@ -91,12 +111,22 @@ function RequestReviewContent() {
                     runQuery={run}
                     cancelQuery={cancelQuery}
                     startServer={start}
+                    tableWarnings={tableWarnings.warnings}
                   />
                 ) : (
                   <KubernetesRequestActions request={request} runQuery={run} />
                 )}
               </RequestSidebar>
               <div className="min-w-0 flex-1">
+                {statementUnderReview &&
+                  (tableWarnings.parsed ? (
+                    <TableWarningList
+                      warnings={tableWarnings.warnings}
+                      className="mb-4"
+                    />
+                  ) : (
+                    <TableWarningUnknown className="mb-4" />
+                  ))}
                 {request._type === "DATASOURCE" ? (
                   <DatasourceRequestDisplay
                     request={request}

@@ -53,6 +53,18 @@ function ExecuteEvent({
               )}
             </div>
           )}
+          {!!event?.acknowledgedTables?.length && (
+            <div
+              className="text-xs text-slate-500"
+              data-testid="acknowledged-tables"
+            >
+              Acknowledged the warning on{" "}
+              <span className="font-mono">
+                {event.acknowledgedTables.join(", ")}
+              </span>
+              .
+            </div>
+          )}
           {event?.command && (
             <div className="text-sm text-slate-500">
               {event?.author && <UserName user={event.author} />} ran the

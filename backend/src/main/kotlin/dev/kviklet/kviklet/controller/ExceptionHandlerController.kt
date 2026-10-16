@@ -10,6 +10,8 @@ import dev.kviklet.kviklet.service.InvalidLicenseException
 import dev.kviklet.kviklet.service.InvalidReviewException
 import dev.kviklet.kviklet.service.LicenseRestrictionException
 import dev.kviklet.kviklet.service.RequestNotExecutableException
+import dev.kviklet.kviklet.service.UnacknowledgedTableException
+import dev.kviklet.kviklet.service.annotations.SyncedAnnotationNotEditableException
 import dev.kviklet.kviklet.telemetry.ServerError
 import dev.kviklet.kviklet.telemetry.Telemetry
 import jakarta.servlet.http.HttpServletRequest
@@ -99,6 +101,34 @@ class ExceptionHandlerController(private val telemetry: Telemetry) {
     fun handleAccessDeniedException(ex: AccessDeniedException, request: HttpServletRequest): ResponseEntity<Any> {
         logger.warn("Access denied at ${request.requestURI}: ${ex.message}")
         return ResponseEntity(ErrorResponse("Access denied"), HttpStatus.FORBIDDEN)
+    }
+
+    @ExceptionHandler(UnacknowledgedTableException::class)
+    fun handleUnacknowledgedTable(ex: UnacknowledgedTableException, request: HttpServletRequest): ResponseEntity<Any> {
+        logger.info("Execution blocked pending table acknowledgement at ${request.requestURI}: ${ex.message}")
+        // 409 rather than 400: the request is well formed and the statement is approved, it just
+        // cannot run until the executor confirms the warnings, which the body carries back.
+        return ResponseEntity(
+            UnacknowledgedTableResponse(
+                message = ex.message ?: "This statement writes to an annotated table",
+                warnings = ex.warnings.map {
+                    TableWarningResponse(it.table, it.message, it.runbookUrl, it.requiresAcknowledgement)
+                },
+            ),
+            HttpStatus.CONFLICT,
+        )
+    }
+
+    @ExceptionHandler(SyncedAnnotationNotEditableException::class)
+    fun handleSyncedAnnotationNotEditable(
+        ex: SyncedAnnotationNotEditableException,
+        request: HttpServletRequest,
+    ): ResponseEntity<Any> {
+        logger.warn("Attempt to edit a synced annotation at ${request.requestURI}: ${ex.message}")
+        return ResponseEntity(
+            ErrorResponse(ex.message ?: "Annotation is managed by the sync source"),
+            HttpStatus.CONFLICT,
+        )
     }
 
     @ExceptionHandler(DownloadException::class)

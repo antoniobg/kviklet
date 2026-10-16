@@ -548,6 +548,61 @@ KVIKLET_BASE_URL=https://kviklet.example.com
 
 This ensures all notification links point to the correct public URL.
 
+### Table Annotations
+
+Some tables carry consequences that are not visible in the SQL.
+The common case is a table mirrored into a cache or a secondary store, where a direct `UPDATE` leaves the copy stale and whoever wrote the statement has no way of knowing.
+Table annotations attach a warning to those tables, so writing to one is flagged to the author while they write it, to the reviewer before they approve it, and to whoever runs it.
+
+Annotations are configured under Settings -> Table Annotations.
+Each one has:
+
+- **Table pattern**: the table name, or a wildcard such as `billing_*`. A pattern without a schema matches the table whether or not the statement qualifies it, so `subscriber` also matches `public.subscriber`.
+- **Connection selector**: which connections it applies to, following the same wildcard convention as role policies. `*` matches every connection, `prod-*` only those whose id starts with `prod-`.
+- **Message**: what the person reading it should do. A message that says what to do next is far more useful than one that only states the table is cached.
+- **Runbook URL** (optional): a link shown next to the message.
+- **Require acknowledgement**: when on, the statement cannot be executed until the person running it ticks a box confirming they have read the warning. The acknowledgement is recorded in the audit log alongside the statement. When off, the warning is shown but never blocks execution.
+
+Only writes raise a warning.
+A `SELECT` cannot leave a secondary store stale, and warning on reads would bury the warnings that matter.
+`UPDATE`, `DELETE`, `INSERT`, `MERGE`, `TRUNCATE` and DDL all count as writes, and a table that only appears in an `UPDATE`'s `WHERE` subquery is treated as a read.
+
+If a statement cannot be parsed, Kviklet says so rather than showing no warning.
+An unparseable statement is not a statement known to be safe.
+
+The acknowledgement is enforced on the server, not just in the browser, so it applies to the API as well as the UI.
+It currently gates single-query requests; statements run inside a temporary-access session are warned about but not blocked.
+
+#### Syncing annotations from your own service
+
+Maintaining the list by hand works, but it drifts.
+If another system already knows which tables are cached, point Kviklet at it under Settings -> General -> Table Annotation Sync and it will keep the list in step.
+
+The endpoint must return a JSON array. Unknown fields are ignored, so the source can add its own:
+
+```json
+[
+  {
+    "id": "subscriber-cache",
+    "table": "public.subscriber",
+    "connectionSelector": "prod-*",
+    "message": "Mirrored into the read cache. Purge it after this runs.",
+    "runbookUrl": "https://runbook.example.com/purge-subscriber-cache",
+    "requiresAcknowledgement": true
+  }
+]
+```
+
+Only `table` (or `tablePattern`) is required; `connectionSelector` defaults to `*` and `requiresAcknowledgement` to `true`.
+An optional `Authorization` header can be set alongside the URL for authenticating the request.
+
+Synced annotations are **stored in Kviklet's own database**, not held in memory.
+A restart or an outage of your endpoint therefore leaves the last synced annotations in force rather than silently disabling the warnings.
+Kviklet re-syncs every few minutes, and the settings page shows when it last succeeded and the error if it did not.
+
+A sync replaces only the annotations it owns.
+Annotations created by hand in Kviklet are never removed by a sync, so the two can be used together.
+
 ### Telemetry
 
 Kviklet reports anonymous usage statistics to help us understand which features are used and where

@@ -53,6 +53,41 @@ class SettingsPage {
     await this.page.waitForURL("**/settings/roles");
   }
 
+  async navigateToTableAnnotations() {
+    await this.navigate();
+    await this.page.getByTestId("settings-table-annotations").click();
+    await this.page.waitForURL("**/settings/table-annotations");
+  }
+
+  async addTableAnnotation(params: {
+    tablePattern: string;
+    message: string;
+    connectionSelector?: string;
+  }) {
+    await this.navigateToTableAnnotations();
+    await this.page
+      .getByTestId("table-annotations-table-create-button")
+      .click();
+    await this.page
+      .getByTestId("annotation-table-pattern")
+      .fill(params.tablePattern);
+    if (params.connectionSelector) {
+      await this.page
+        .getByTestId("annotation-connection-selector")
+        .fill(params.connectionSelector);
+    }
+    await this.page.getByTestId("annotation-message").fill(params.message);
+    await this.page.getByTestId("save-annotation").click();
+    // Wait for the dialog to actually close rather than for the pattern text, which the dialog
+    // itself and any pre-existing row would both satisfy while the dialog is still up.
+    await this.page
+      .getByTestId("save-annotation")
+      .waitFor({ state: "detached" });
+    await expect(
+      this.page.getByTestId("table-annotations-table"),
+    ).toContainText(params.message);
+  }
+
   async addUser(name: string, email: string, password: string) {
     await this.navigateToUsers();
     await this.page.getByTestId("add-user-button").click();
@@ -343,7 +378,9 @@ class LiveSessionPage {
 
   async executeQuery(query: string) {
     await this.page.waitForSelector('[data-testid="monaco-editor-wrapper"]');
-    await expect(this.page.getByRole("region", { name: "Session workspace" })).toHaveAttribute("aria-busy", "false");
+    await expect(
+      this.page.getByRole("region", { name: "Session workspace" }),
+    ).toHaveAttribute("aria-busy", "false");
 
     await this.page.click('[data-testid="monaco-editor-wrapper"]');
 

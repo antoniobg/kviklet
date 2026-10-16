@@ -22,17 +22,25 @@ import {
 import { useHasPermission } from "../../hooks/permissions";
 import useConfig from "../../components/ConfigProvider";
 import { EnterpriseFeatureModal } from "../../components/EnterpriseFeature";
+import TableAckConfirm from "../../components/TableAckConfirm";
+import { TableWarning } from "../../api/TableAnnotationApi";
 
 function DatasourceRequestActions({
   request,
   runQuery,
   cancelQuery,
   startServer,
+  tableWarnings = [],
 }: {
   request: DatasourceExecutionRequestResponseWithComments | undefined;
-  runQuery: (explain?: boolean, dryRun?: boolean) => Promise<void>;
+  runQuery: (
+    explain?: boolean,
+    dryRun?: boolean,
+    acknowledgedTables?: string[],
+  ) => Promise<void>;
   cancelQuery: () => Promise<void>;
   startServer: () => Promise<void>;
+  tableWarnings?: TableWarning[];
 }) {
   const { addNotification } = useNotification();
   const userContext = useContext(UserStatusContext);
@@ -50,6 +58,7 @@ function DatasourceRequestActions({
   // so this is the global "can create anywhere" check, not one on this connection.
   const canCreateRequests = useHasPermission("execution_request:edit");
   const [showSQLDumpModal, setShowSQLDumpModal] = useState(false);
+  const [showTableAckModal, setShowTableAckModal] = useState(false);
   const [showProxyUpsellModal, setShowProxyUpsellModal] = useState(false);
   const { config } = useConfig();
   const licenseValid = config?.licenseValid ?? false;
@@ -315,13 +324,23 @@ function DatasourceRequestActions({
     );
   };
 
+  // Only annotations that ask for it gate execution; the rest are shown on the page but never
+  // stand between the executor and the button.
+  const warningsNeedingAck = tableWarnings.filter(
+    (warning) => warning.requiresAcknowledgement,
+  );
+
   const handleButtonClick = async () => {
     if (request?.type === "Dump") {
       setShowSQLDumpModal(true);
+    } else if (warningsNeedingAck.length > 0) {
+      setShowTableAckModal(true);
     } else {
       await runQuery();
     }
   };
+
+
 
   const primaryDisabled =
     request?.reviewStatus !== "APPROVED" ||
@@ -363,7 +382,7 @@ function DatasourceRequestActions({
             className={`flex-1 ${primaryRounding}`}
             id="runQuery"
             variant={primaryDisabled ? "disabled" : "primary"}
-            onClick={() => void runQuery()}
+            onClick={() => void handleButtonClick()}
             dataTestId="run-query-button"
             title={getDisabledReason()}
           >
@@ -379,6 +398,18 @@ function DatasourceRequestActions({
         )}
       </div>
       <SQLDumpModal />
+      {showTableAckModal && (
+        <Modal setVisible={setShowTableAckModal}>
+          <TableAckConfirm
+            warnings={warningsNeedingAck}
+            onConfirm={async (acknowledgedTables) => {
+              setShowTableAckModal(false);
+              await runQuery(false, false, acknowledgedTables);
+            }}
+            onCancel={() => setShowTableAckModal(false)}
+          />
+        </Modal>
+      )}
       {showProxyUpsellModal && (
         <EnterpriseFeatureModal
           feature="databaseProxy"

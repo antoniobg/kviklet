@@ -18,6 +18,7 @@ const ConfigResponseSchema = z.object({
   teamsUrl: z.string().nullable().optional(),
   slackUrl: z.string().nullable().optional(),
   proxyEnabled: z.boolean().default(false),
+  tableAnnotationSyncUrl: z.string().nullable().optional(),
   version: z.string(),
   buildDate: z.string(),
   gitCommit: z.string(),
@@ -38,6 +39,8 @@ export const ConfigPayloadSchema = ConfigResponseSchema.omit({
   // Optional on writes: a PUT that leaves it out keeps the stored value, so the
   // notification form can never flip the proxy toggle as a side effect.
   proxyEnabled: z.boolean().optional(),
+  // Write-only: the server never echoes the secret back, so it is absent from the response schema.
+  tableAnnotationSyncAuthHeader: z.string().nullable().optional(),
 });
 
 export type ConfigResponse = z.infer<typeof ConfigResponseSchema>;

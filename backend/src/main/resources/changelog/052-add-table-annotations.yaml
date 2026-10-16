@@ -1,0 +1,73 @@
+databaseChangeLog:
+  - changeSet:
+      id: 052-add-table-annotations
+      author: antonio
+      changes:
+        - createTable:
+            tableName: table_annotation
+            columns:
+              - column:
+                  name: id
+                  type: CHAR(22)
+                  constraints:
+                    primaryKey: true
+                    nullable: false
+              - column:
+                  name: table_pattern
+                  type: VARCHAR(255)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: connection_selector
+                  type: VARCHAR(255)
+                  defaultValue: '*'
+                  constraints:
+                    nullable: false
+              - column:
+                  name: message
+                  type: TEXT
+                  constraints:
+                    nullable: false
+              - column:
+                  name: runbook_url
+                  type: VARCHAR(2048)
+                  constraints:
+                    nullable: true
+              - column:
+                  name: requires_acknowledgement
+                  type: BOOLEAN
+                  defaultValueBoolean: true
+                  constraints:
+                    nullable: false
+              - column:
+                  name: source
+                  type: VARCHAR(16)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: external_id
+                  type: VARCHAR(255)
+                  constraints:
+                    nullable: true
+              - column:
+                  name: updated_at
+                  type: datetime
+                  defaultValueDate: 'now()'
+                  constraints:
+                    nullable: false
+        # A synced annotation is identified upstream by external_id, so a sync can upsert by it.
+        # Manual rows carry no external_id, which is why this is a partial-style unique index on a
+        # nullable column rather than a constraint.
+        - createIndex:
+            tableName: table_annotation
+            indexName: idx_table_annotation_external_id
+            unique: true
+            columns:
+              - column:
+                  name: external_id
+        - createIndex:
+            tableName: table_annotation
+            indexName: idx_table_annotation_source
+            columns:
+              - column:
+                  name: source

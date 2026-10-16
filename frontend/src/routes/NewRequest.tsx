@@ -28,6 +28,11 @@ import { Pod, getPods } from "../api/KubernetesApi";
 import useConnections from "../hooks/connections";
 import useNotification from "../hooks/useNotification";
 import { isApiErrorResponse } from "../api/Errors";
+import { useTableWarnings } from "../hooks/tableWarnings";
+import {
+  TableWarningList,
+  TableWarningUnknown,
+} from "../components/TableWarnings";
 import { hasPermission } from "../api/Permissions";
 import SearchInput from "../components/SearchInput";
 
@@ -439,11 +444,20 @@ const DatasourceExecutionRequestForm = ({
     handleSubmit,
     formState: { errors, isSubmitting },
     setValue,
+    watch,
   } = useForm<DatasourceExecutionRequest>({
     resolver: zodResolver(DatasourceExecutionRequestSchema),
   });
 
   const [infiniteAccess, setInfiniteAccess] = useState(false);
+
+  // Warn while the statement is being written, so an annotated table is noticed before the request
+  // is even submitted rather than at the point someone is trying to run it.
+  const statement = watch("statement");
+  const tableWarnings = useTableWarnings(
+    connection.id,
+    mode === "SingleExecution" ? statement : undefined,
+  );
 
   useEffect(() => {
     const state = location.state as PreConfiguredStateDatasource;
@@ -634,6 +648,14 @@ const DatasourceExecutionRequestForm = ({
             )}
           </div>
         )}
+        {mode === "SingleExecution" &&
+          statement &&
+          statement.trim() !== "" &&
+          (tableWarnings.parsed ? (
+            <TableWarningList warnings={tableWarnings.warnings} className="my-3" />
+          ) : (
+            <TableWarningUnknown className="my-3" />
+          ))}
         <div className="-mx-3 mb-2 flex flex-wrap">
           <div className="mb-6 ml-auto px-3">
             <Button

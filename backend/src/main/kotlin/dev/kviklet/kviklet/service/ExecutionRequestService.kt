@@ -102,6 +102,7 @@ class ExecutionRequestService(
     private val configService: ConfigService,
     private val baseUrlResolver: BaseUrlResolver,
     private val telemetry: Telemetry,
+    private val tableWarningService: TableWarningService,
     transactionManager: PlatformTransactionManager,
 ) {
     private val logger = LoggerFactory.getLogger(javaClass)
@@ -548,6 +549,7 @@ class ExecutionRequestService(
         connection: DatasourceConnection,
         query: String?,
         userId: String,
+        acknowledgedTables: List<String> = emptyList(),
         isDownload: Boolean = false,
     ): DBExecutionResult {
         if (executionRequest.request !is DatasourceExecutionRequest) {
@@ -569,6 +571,7 @@ class ExecutionRequestService(
             ExecutePayload(
                 query = queryToExecute,
                 isDownload = isDownload,
+                acknowledgedTables = acknowledgedTables,
             ),
         )
 
@@ -754,7 +757,13 @@ class ExecutionRequestService(
     }
 
     @Policy(Permission.EXECUTION_REQUEST_EXECUTE)
-    fun execute(id: ExecutionRequestId, query: String?, userId: String, dryRun: Boolean = false): ExecutionResult {
+    fun execute(
+        id: ExecutionRequestId,
+        query: String?,
+        userId: String,
+        dryRun: Boolean = false,
+        acknowledgedTables: List<String> = emptyList(),
+    ): ExecutionResult {
         val executionRequest = executionRequestAdapter.getExecutionRequestDetails(id)
         val connection = executionRequest.request.connection
 
@@ -786,15 +795,49 @@ class ExecutionRequestService(
         } else {
             // Normal execution - always requires approval
             executionRequest.raiseIfNotExecutable()
+            raiseIfUnacknowledged(executionRequest, query, acknowledgedTables)
             return when (connection) {
                 is DatasourceConnection -> {
-                    executeDatasourceRequest(id, executionRequest, connection, query, userId)
+                    executeDatasourceRequest(id, executionRequest, connection, query, userId, acknowledgedTables)
                 }
 
                 is KubernetesConnection -> {
                     executeKubernetesRequest(id, executionRequest, connection, userId, query)
                 }
             }.also { trackExecution(executionRequest, ExecutionMode.EXECUTE, it) }
+        }
+    }
+
+    /**
+     * Blocks execution when the statement writes to a table whose annotation requires
+     * acknowledgement and the executor has not acknowledged it.
+     *
+     * The client shows the warnings and collects the confirmation, but the decision is made here:
+     * the modal is a prompt, this is the gate, and the API is reachable without it.
+     *
+     * Only single executions are gated for now. Live sessions run through this same method with an
+     * ad-hoc query, and gating them before the session UI can collect an acknowledgement would just
+     * make their statements fail with no way to proceed.
+     */
+    private fun raiseIfUnacknowledged(
+        executionRequest: ExecutionRequestDetails,
+        query: String?,
+        acknowledgedTables: List<String>,
+    ) {
+        if (executionRequest.request.type != RequestType.SingleExecution) return
+
+        val statement = (executionRequest.request as? DatasourceExecutionRequest)?.statement ?: query ?: return
+        val warnings = tableWarningService.warningsFor(executionRequest.request.connection, statement)
+        if (warnings !is StatementWarnings.Known) return
+
+        val acknowledged = acknowledgedTables.map { it.trim().lowercase() }.toSet()
+        val outstanding = warnings.acknowledgementRequired.filterNot { it.table.lowercase() in acknowledged }
+        if (outstanding.isNotEmpty()) {
+            throw UnacknowledgedTableException(
+                "This statement writes to ${outstanding.joinToString(", ") { it.table }}, " +
+                    "which must be acknowledged before it can be executed.",
+                outstanding,
+            )
         }
     }
 
@@ -827,7 +870,12 @@ class ExecutionRequestService(
     // Intentionally not @Transactional: mirrors execute(), so the audited execute event is committed
     // independently and survives even when a database error fails the download.
     @Policy(Permission.EXECUTION_REQUEST_EXECUTE)
-    fun downloadResults(id: ExecutionRequestId, userId: String, query: String? = null): DownloadResult {
+    fun downloadResults(
+        id: ExecutionRequestId,
+        userId: String,
+        query: String? = null,
+        acknowledgedTables: List<String> = emptyList(),
+    ): DownloadResult {
         val executionRequest = executionRequestAdapter.getExecutionRequestDetails(id)
         val connection = executionRequest.request.connection
         if (connection !is DatasourceConnection || executionRequest.request !is DatasourceExecutionRequest) {
@@ -842,8 +890,19 @@ class ExecutionRequestService(
             )
         }
         executionRequest.raiseIfNotExecutable()
+        // Downloading runs the statement just like /execute does, so it has to pass the same gate;
+        // otherwise it would be a way around the acknowledgement.
+        raiseIfUnacknowledged(executionRequest, query, acknowledgedTables)
 
-        val result = executeDatasourceRequest(id, executionRequest, connection, query, userId, isDownload = true)
+        val result = executeDatasourceRequest(
+            id,
+            executionRequest,
+            connection,
+            query,
+            userId,
+            acknowledgedTables,
+            isDownload = true,
+        )
         trackExecution(executionRequest, ExecutionMode.DOWNLOAD, result)
 
         return buildDownloadResult(executionRequest, result.results)
@@ -1207,5 +1266,12 @@ open class RequestNotExecutableException(message: String) : RuntimeException(mes
 class DownloadException(message: String) : RuntimeException(message)
 
 class MissingQueryException(message: String) : RuntimeException(message)
+
+/**
+ * Raised when a statement writes to an annotated table whose annotation requires acknowledgement and
+ * the executor has not acknowledged it. Carries the outstanding warnings so the client can show
+ * exactly what still needs confirming.
+ */
+class UnacknowledgedTableException(message: String, val warnings: List<TableWarning>) : RuntimeException(message)
 
 class AlreadyExecutedException(message: String) : RequestNotExecutableException(message)

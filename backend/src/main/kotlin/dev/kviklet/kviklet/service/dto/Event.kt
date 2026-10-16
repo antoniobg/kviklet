@@ -108,7 +108,7 @@ abstract class Event(
                 ExecuteEvent(
                     id, request, author, createdAt, payload.query, results, payload.command,
                     payload.containerName, payload.podName, payload.namespace, payload.isDownload,
-                    payload.isDump, payload.isDryRun,
+                    payload.isDump, payload.isDryRun, payload.acknowledgedTables,
                 )
             }
         }
@@ -165,6 +165,8 @@ data class ExecuteEvent(
     val isDownload: Boolean = false,
     val isDump: Boolean = false,
     val isDryRun: Boolean = false,
+    /** Annotated tables the executor confirmed before running this statement. */
+    val acknowledgedTables: List<String> = emptyList(),
 ) : Event(EventType.EXECUTE, createdAt, request) {
     override fun hashCode() = Objects.hash(eventId)
 }

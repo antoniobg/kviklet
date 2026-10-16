@@ -4,6 +4,8 @@ import com.fasterxml.jackson.annotation.JsonSubTypes
 import com.fasterxml.jackson.annotation.JsonTypeInfo
 import dev.kviklet.kviklet.security.toPermissionStrings
 import dev.kviklet.kviklet.service.ConnectionService
+import dev.kviklet.kviklet.service.StatementWarnings
+import dev.kviklet.kviklet.service.TableWarningService
 import dev.kviklet.kviklet.service.TestConnectionResult
 import dev.kviklet.kviklet.service.dto.AuthenticationDetails
 import dev.kviklet.kviklet.service.dto.AuthenticationType
@@ -17,6 +19,7 @@ import dev.kviklet.kviklet.service.dto.DatasourceType
 import dev.kviklet.kviklet.service.dto.KubernetesConnection
 import dev.kviklet.kviklet.service.dto.ReviewConfig
 import dev.kviklet.kviklet.service.dto.RoleRequirement
+import io.swagger.v3.oas.annotations.Operation
 import io.swagger.v3.oas.annotations.media.Schema
 import io.swagger.v3.oas.annotations.tags.Tag
 import jakarta.validation.Valid
@@ -358,13 +361,58 @@ data class KubernetesConnectionResponse(
 
 data class TestConnectionResponse(val success: Boolean, val details: String, val accessibleDatabases: List<String>)
 
+data class AnalyzeStatementRequest(val statement: String?)
+
+/**
+ * What Kviklet can say about a statement's write targets.
+ *
+ * [parsed] false means the statement could not be parsed, so the warning list is not a statement of
+ * safety - the UI must say the tables could not be determined rather than showing nothing.
+ */
+data class AnalyzeStatementResponse(
+    val parsed: Boolean,
+    val warnings: List<TableWarningResponse>,
+    val parseError: String? = null,
+) {
+    companion object {
+        fun from(warnings: StatementWarnings): AnalyzeStatementResponse = when (warnings) {
+            is StatementWarnings.Known -> AnalyzeStatementResponse(
+                parsed = true,
+                warnings = warnings.warnings.map { TableWarningResponse.from(it) },
+            )
+
+            is StatementWarnings.Unknown -> AnalyzeStatementResponse(
+                parsed = false,
+                warnings = emptyList(),
+                parseError = warnings.reason,
+            )
+        }
+    }
+}
+
 @RestController()
 @Validated
 @RequestMapping("/connections")
 @Tag(
     name = "Datasource Connections",
 )
-class ConnectionController(val connectionService: ConnectionService) {
+class ConnectionController(val connectionService: ConnectionService, val tableWarningService: TableWarningService) {
+
+    @Operation(
+        summary = "Analyze a statement against this connection's table annotations",
+        description = "Returns the annotations matching the tables the statement writes to, so the " +
+            "author and the reviewer can be warned before it runs. Reads are ignored.",
+    )
+    @PostMapping("/{connectionId}/analyze-statement")
+    fun analyzeStatement(
+        @PathVariable connectionId: String,
+        @RequestBody request: AnalyzeStatementRequest,
+    ): AnalyzeStatementResponse {
+        // Goes through the policy-guarded lookup so a user can only analyze against a connection
+        // they are allowed to see.
+        val connection = connectionService.getConnectionWithPermissions(ConnectionId(connectionId)).connection
+        return AnalyzeStatementResponse.from(tableWarningService.warningsFor(connection, request.statement))
+    }
 
     @GetMapping("/{connectionId}")
     fun getConnection(@PathVariable connectionId: String): ConnectionResponse {

@@ -8,6 +8,7 @@ import {
   UsersIcon,
   LockClosedIcon,
   ArrowPathIcon,
+  ExclamationTriangleIcon,
 } from "@heroicons/react/20/solid";
 
 import {
@@ -30,6 +31,7 @@ import ConnectionDetails from "./connection/details/ConnectionDetails";
 import LicenseSettings from "./LicenseSettings";
 import ApiKeyPage from "./ApiKeySettings";
 import RoleSyncSettings from "./RoleSyncSettings";
+import TableAnnotationSettings from "./TableAnnotationSettings";
 import useConfig from "../../components/ConfigProvider";
 import { UserStatusContext } from "../../components/UserStatusProvider";
 import { Permission } from "../../api/Permissions";
@@ -133,6 +135,19 @@ const Settings = () => {
         </div>
       ),
       link: "/settings/connections",
+    },
+    {
+      name: "table-annotations",
+      permission: "configuration:get",
+      tabContent: (
+        <div className="flex flex-col">
+          <div className={tabStyles}>
+            <ExclamationTriangleIcon className="mr-2 h-6" />
+            Table Annotations
+          </div>
+        </div>
+      ),
+      link: "/settings/table-annotations",
     },
     {
       name: "users",
@@ -261,6 +276,19 @@ const Settings = () => {
               <Route
                 path="connections/:connectionId"
                 element={<ConnectionDetails />}
+              />
+              <Route
+                path="table-annotations"
+                element={
+                  <RequirePermission
+                    permission="configuration:get"
+                    fallback={
+                      <NotAuthorized resource="the table annotations" />
+                    }
+                  >
+                    <TableAnnotationSettings />
+                  </RequirePermission>
+                }
               />
               <Route path="users" element={<UserSettings />} />
               <Route

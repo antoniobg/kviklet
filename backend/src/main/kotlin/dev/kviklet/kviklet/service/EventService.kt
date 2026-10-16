@@ -119,4 +119,5 @@ fun ExecuteEvent.toPayload(): Payload = ExecutePayload(
     isDownload = isDownload,
     isDump = isDump,
     isDryRun = isDryRun,
+    acknowledgedTables = acknowledgedTables,
 )

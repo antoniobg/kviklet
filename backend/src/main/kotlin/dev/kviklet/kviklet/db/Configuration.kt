@@ -37,6 +37,10 @@ class ConfigurationAdapter(private val configurationRepository: ConfigurationRep
                 configuration.teamsUrl?.let { ConfigurationEntity("teamsUrl", it) },
                 configuration.slackUrl?.let { ConfigurationEntity("slackUrl", it) },
                 configuration.proxyEnabled?.let { ConfigurationEntity("proxyEnabled", it.toString()) },
+                configuration.tableAnnotationSyncUrl?.let { ConfigurationEntity("tableAnnotationSyncUrl", it) },
+                configuration.tableAnnotationSyncAuthHeader?.let {
+                    ConfigurationEntity("tableAnnotationSyncAuthHeader", it)
+                },
             ),
         )
         // Null fields mean "leave unchanged", so the saved entities alone are not the full picture:
@@ -49,4 +53,6 @@ fun List<ConfigurationEntity>.toDto(): Configuration = Configuration(
     teamsUrl = this.find { it.key == "teamsUrl" }?.value,
     slackUrl = this.find { it.key == "slackUrl" }?.value,
     proxyEnabled = this.find { it.key == "proxyEnabled" }?.value?.toBoolean(),
+    tableAnnotationSyncUrl = this.find { it.key == "tableAnnotationSyncUrl" }?.value,
+    tableAnnotationSyncAuthHeader = this.find { it.key == "tableAnnotationSyncAuthHeader" }?.value,
 )

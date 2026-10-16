@@ -114,6 +114,7 @@ const ExecuteEvent = withType(
     isDownload: z.boolean().optional(),
     isDump: z.boolean().optional(),
     isDryRun: z.boolean().optional(),
+    acknowledgedTables: z.array(z.string()).optional(),
   }),
   "EXECUTE",
 );
@@ -606,6 +607,7 @@ const runQuery = async (
   query?: string,
   explain: boolean = false,
   dryRun: boolean = false,
+  acknowledgedTables: string[] = [],
 ): Promise<ApiResponse<QueryResult>> => {
   return fetchWithErrorHandling(
     requestUrl + id + "/execute",
@@ -615,7 +617,7 @@ const runQuery = async (
         "Content-Type": "application/json",
       },
       credentials: "include",
-      body: JSON.stringify({ query, explain, dryRun }),
+      body: JSON.stringify({ query, explain, dryRun, acknowledgedTables }),
     },
     DBExecuteResponseSchema,
   );

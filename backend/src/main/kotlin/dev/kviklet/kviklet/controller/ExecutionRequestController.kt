@@ -123,6 +123,8 @@ data class ExecuteExecutionRequestRequest(
     val query: String?,
     val explain: Boolean = false,
     val dryRun: Boolean = false,
+    /** Annotated tables the executor confirms they have seen, gating execution server-side. */
+    val acknowledgedTables: List<String> = emptyList(),
 )
 
 data class CreateReviewRequest(val comment: String, val action: ReviewAction)
@@ -505,6 +507,7 @@ abstract class EventResponse(val type: EventType, open val createdAt: LocalDateT
                 event.isDownload,
                 event.isDump,
                 event.isDryRun,
+                event.acknowledgedTables,
             )
 
             else -> {
@@ -558,6 +561,8 @@ data class ExecuteEventResponse(
     val isDownload: Boolean = false,
     val isDump: Boolean = false,
     val isDryRun: Boolean = false,
+    /** Annotated tables the executor confirmed before this statement ran. */
+    val acknowledgedTables: List<String> = emptyList(),
 ) : EventResponse(EventType.EXECUTE, createdAt)
 
 @JsonTypeInfo(use = JsonTypeInfo.Id.NAME, include = JsonTypeInfo.As.PROPERTY, property = "type")
@@ -785,6 +790,7 @@ class ExecutionRequestController(val executionRequestService: ExecutionRequestSe
                 request?.query,
                 userDetails.id,
                 request?.dryRun ?: false,
+                request?.acknowledgedTables ?: emptyList(),
             )
         },
     )
@@ -799,10 +805,16 @@ class ExecutionRequestController(val executionRequestService: ExecutionRequestSe
         @CurrentUser userDetails: UserDetailsWithId,
         response: HttpServletResponse,
         @RequestParam query: String?,
+        @RequestParam(required = false) acknowledgedTables: List<String>?,
     ) {
         // Errors (failed query, missing approval, access denied) propagate to the
         // ExceptionHandlerController before anything is written to the response.
-        val download = executionRequestService.downloadResults(executionRequestId, userDetails.id, query)
+        val download = executionRequestService.downloadResults(
+            executionRequestId,
+            userDetails.id,
+            query,
+            acknowledgedTables ?: emptyList(),
+        )
         response.contentType = download.contentType
         response.setHeader(
             HttpHeaders.CONTENT_DISPOSITION,

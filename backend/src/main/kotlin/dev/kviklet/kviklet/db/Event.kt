@@ -64,6 +64,11 @@ data class ExecutePayload(
     val isDownload: Boolean = false,
     val isDump: Boolean = false,
     val isDryRun: Boolean = false,
+    /**
+     * Tables the executor explicitly acknowledged as annotated before this statement ran. Stored so
+     * the audit log shows not just what was executed but that the warning was seen and confirmed.
+     */
+    val acknowledgedTables: List<String> = emptyList(),
 ) : Payload(EventType.EXECUTE)
 
 @JsonIgnoreProperties(ignoreUnknown = true)

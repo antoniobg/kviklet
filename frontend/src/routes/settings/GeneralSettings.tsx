@@ -107,6 +107,7 @@ const ConfigForm = ({
       teamsUrl: config?.teamsUrl,
       slackUrl: config?.slackUrl,
       proxyEnabled: config.proxyEnabled ?? false,
+      tableAnnotationSyncUrl: config?.tableAnnotationSyncUrl,
     },
   });
 
@@ -118,9 +119,15 @@ const ConfigForm = ({
         teamsUrl: config?.teamsUrl ?? "",
         slackUrl: config?.slackUrl ?? "",
         proxyEnabled: config.proxyEnabled ?? false,
+        tableAnnotationSyncUrl: config?.tableAnnotationSyncUrl ?? "",
       });
     }
-  }, [config?.teamsUrl, config?.slackUrl, config.proxyEnabled]);
+  }, [
+    config?.teamsUrl,
+    config?.slackUrl,
+    config.proxyEnabled,
+    config?.tableAnnotationSyncUrl,
+  ]);
 
   const proxyEnabled = watch("proxyEnabled") ?? false;
   const licenseValid = config.licenseValid;
@@ -171,6 +178,48 @@ const ConfigForm = ({
                   {...register("slackUrl")}
                   placeholder="Slack URL"
                   error={errors.slackUrl}
+                ></InputField>
+              </fieldset>
+            </DisclosurePanel>
+          </>
+        )}
+      </Disclosure>
+      <Disclosure defaultOpen={true}>
+        {({ open }) => (
+          <>
+            <DisclosureButton className="py-2" type="button">
+              <SectionHeader title="Table Annotation Sync" open={open} />
+            </DisclosureButton>
+            <DisclosurePanel unmount={false}>
+              <fieldset disabled={readOnly} className="flex flex-col space-y-4">
+                <span className="text-sm dark:text-slate-300">
+                  Kviklet can pull the list of annotated tables from your own
+                  service, so it stays accurate without being maintained by hand.
+                  The endpoint must return a JSON array of objects with at least
+                  a <code>table</code> and a <code>message</code>. Annotations are
+                  stored in Kviklet, so they stay in force if the endpoint is
+                  briefly unreachable. Manage them under{" "}
+                  <Link
+                    to="/settings/table-annotations"
+                    className="text-blue-600 underline hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300"
+                  >
+                    Table Annotations
+                  </Link>
+                  .
+                </span>
+                <InputField
+                  label="Sync URL"
+                  type="text"
+                  {...register("tableAnnotationSyncUrl")}
+                  placeholder="https://internal.example.com/cached-tables"
+                  error={errors.tableAnnotationSyncUrl}
+                ></InputField>
+                <InputField
+                  label="Authorization header"
+                  type="passwordlike"
+                  {...register("tableAnnotationSyncAuthHeader")}
+                  placeholder="Bearer ..."
+                  error={errors.tableAnnotationSyncAuthHeader}
                 ></InputField>
               </fieldset>
             </DisclosurePanel>

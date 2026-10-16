@@ -40,7 +40,13 @@ open class PublicConfigResponse(
 )
 
 // Null fields mean "leave unchanged", so a partial update never wipes the other settings.
-data class ConfigRequest(val teamsUrl: String?, val slackUrl: String?, val proxyEnabled: Boolean? = null)
+data class ConfigRequest(
+    val teamsUrl: String?,
+    val slackUrl: String?,
+    val proxyEnabled: Boolean? = null,
+    val tableAnnotationSyncUrl: String? = null,
+    val tableAnnotationSyncAuthHeader: String? = null,
+)
 
 data class ConfigResponse(
     override val oAuthProvider: String?,
@@ -56,6 +62,7 @@ data class ConfigResponse(
     override val gitCommit: String,
     val teamsUrl: String?,
     val slackUrl: String?,
+    val tableAnnotationSyncUrl: String?,
 ) : PublicConfigResponse(
     oAuthProvider,
     ldapEnabled,
@@ -93,6 +100,8 @@ data class ConfigResponse(
             gitCommit = gitCommit,
             teamsUrl = configuration.teamsUrl,
             slackUrl = configuration.slackUrl,
+            // The auth header is write-only: it is a secret and is never echoed back.
+            tableAnnotationSyncUrl = configuration.tableAnnotationSyncUrl,
         )
     }
 }
@@ -153,6 +162,8 @@ class ConfigController(
                 teamsUrl = request.teamsUrl,
                 slackUrl = request.slackUrl,
                 proxyEnabled = request.proxyEnabled,
+                tableAnnotationSyncUrl = request.tableAnnotationSyncUrl,
+                tableAnnotationSyncAuthHeader = request.tableAnnotationSyncAuthHeader,
             ),
         )
         return ConfigResponse.fromConfiguration(
