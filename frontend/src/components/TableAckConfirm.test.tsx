@@ -26,17 +26,16 @@ describe("TableAckConfirm", () => {
     );
 
     const execute = screen.getByTestId("confirm-table-ack");
-    await userEvent.click(execute);
-    expect(onConfirm).not.toHaveBeenCalled();
+    expect(execute).toBeDisabled();
 
-    await userEvent.click(screen.getByTestId("ack-public.subscriber"));
-    await userEvent.click(execute);
+    userEvent.click(screen.getByTestId("ack-public.subscriber"));
     // One of two acknowledged is still not enough: the point is that each table is read.
-    expect(onConfirm).not.toHaveBeenCalled();
+    await waitFor(() => expect(execute).toBeDisabled());
 
-    await userEvent.click(screen.getByTestId("ack-public.plan"));
-    await userEvent.click(execute);
+    userEvent.click(screen.getByTestId("ack-public.plan"));
+    await waitFor(() => expect(execute).toBeEnabled());
 
+    userEvent.click(execute);
     await waitFor(() => expect(onConfirm).toHaveBeenCalledTimes(1));
     expect(onConfirm).toHaveBeenCalledWith([
       "public.subscriber",
