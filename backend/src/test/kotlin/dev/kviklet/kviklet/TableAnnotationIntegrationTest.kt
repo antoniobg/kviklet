@@ -1,5 +1,6 @@
 package dev.kviklet.kviklet
 
+import dev.kviklet.kviklet.db.ConfigurationAdapter
 import dev.kviklet.kviklet.db.ConnectionAdapter
 import dev.kviklet.kviklet.db.TableAnnotationAdapter
 import dev.kviklet.kviklet.db.User
@@ -57,6 +58,8 @@ class TableAnnotationIntegrationTest {
     @Autowired private lateinit var connectionAdapter: ConnectionAdapter
 
     @Autowired private lateinit var tableAnnotationAdapter: TableAnnotationAdapter
+
+    @Autowired private lateinit var configurationAdapter: ConfigurationAdapter
 
     private lateinit var testUser: User
     private lateinit var testReviewer: User
@@ -236,6 +239,54 @@ class TableAnnotationIntegrationTest {
             .andExpect(status().isOk)
             .andExpect(jsonPath("$.parsed").value(false))
             .andExpect(jsonPath("$.warnings").isEmpty)
+    }
+
+    @Test
+    fun `the sync endpoint answers with the status instead of failing the policy check`() {
+        // The @Policy interceptor post-checks a method's return value and demands a
+        // SecuredDomainObject, so a service method that returned the status object itself blew up
+        // with a 500 *after* syncing. Sync with no URL configured is a no-op, which is enough to
+        // exercise the endpoint's response path.
+        val userCookie = userHelper.login(email = testUser.email, mockMvc = mockMvc)
+
+        mockMvc.perform(post("/table-annotations/sync").cookie(userCookie))
+            .andExpect(status().isOk)
+            .andExpect(jsonPath("$.configured").value(false))
+    }
+
+    @Test
+    fun `a sync against an unreachable source reports the error and keeps the annotations`() {
+        // The admin asked to sync, so "here is why it failed, and what you had is still in force"
+        // beats a generic 500. Nothing listens on this port.
+        configurationAdapter.setConfiguration("tableAnnotationSyncUrl", "http://127.0.0.1:1/annotations")
+        annotate("simple_table", "Mirrored into the read cache.")
+        val userCookie = userHelper.login(email = testUser.email, mockMvc = mockMvc)
+
+        try {
+            mockMvc.perform(post("/table-annotations/sync").cookie(userCookie))
+                .andExpect(status().isOk)
+                .andExpect(jsonPath("$.lastSyncError").isNotEmpty)
+
+            // The manual annotation is untouched, so the warnings keep working.
+            mockMvc.perform(get("/table-annotations/").cookie(userCookie))
+                .andExpect(status().isOk)
+                .andExpect(jsonPath("$.annotations[0].tablePattern").value("simple_table"))
+        } finally {
+            configurationAdapter.setConfiguration("tableAnnotationSyncUrl", "")
+            configurationAdapter.setConfiguration("tableAnnotationLastSyncError", "")
+        }
+    }
+
+    @Test
+    fun `the list endpoint returns annotations with their sync status`() {
+        annotate("simple_table", "Mirrored into the read cache.")
+        val userCookie = userHelper.login(email = testUser.email, mockMvc = mockMvc)
+
+        mockMvc.perform(get("/table-annotations/").cookie(userCookie))
+            .andExpect(status().isOk)
+            .andExpect(jsonPath("$.annotations[0].tablePattern").value("simple_table"))
+            .andExpect(jsonPath("$.annotations[0].source").value("MANUAL"))
+            .andExpect(jsonPath("$.syncStatus.neverSynced").value(false))
     }
 
     @Test

@@ -153,5 +153,9 @@ class TableAnnotationController(
             "waiting for the next scheduled sync.",
     )
     @PostMapping("/sync")
-    fun sync(): AnnotationSyncStatusResponse = AnnotationSyncStatusResponse.from(annotationSyncService.syncNow())
+    fun sync(): AnnotationSyncStatusResponse {
+        // syncNow is the permission-guarded call, so it has to run before status is read.
+        annotationSyncService.syncNow()
+        return AnnotationSyncStatusResponse.from(annotationSyncService.status())
+    }
 }

@@ -1,0 +1,54 @@
+name: kviklet-annotations-demo
+
+services:
+  # The "production" database you run statements against.
+  demo-postgres:
+    image: postgres:16
+    restart: always
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: demo
+    ports:
+      - "55432:5432"
+    volumes:
+      - ./demo-data.sql:/docker-entrypoint-initdb.d/init.sql:ro
+
+  # Kviklet's own application state.
+  kviklet-postgres:
+    image: postgres:16
+    restart: always
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: kviklet
+
+  # Stands in for the internal service that knows which tables are cached.
+  annotation-server:
+    build: ./annotation-server
+    restart: always
+    ports:
+      - "8000:8000"
+    volumes:
+      - annotation-data:/data
+
+  kviklet:
+    # Built from this checkout, so it includes the table annotations feature.
+    build:
+      context: ../..
+    ports:
+      - "8080:8080"
+    environment:
+      - SPRING_DATASOURCE_URL=jdbc:postgresql://kviklet-postgres:5432/kviklet
+      - SPRING_DATASOURCE_USERNAME=postgres
+      - SPRING_DATASOURCE_PASSWORD=postgres
+      - INITIAL_USER_EMAIL=admin@admin.com
+      - INITIAL_USER_PASSWORD=admin
+      - KVIKLET_TELEMETRY_ENABLED=false
+    depends_on:
+      - kviklet-postgres
+      - demo-postgres
+      - annotation-server
+
+volumes:
+  annotation-data:

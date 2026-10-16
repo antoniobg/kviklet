@@ -79,10 +79,22 @@ class AnnotationSyncService(
         }
     }
 
+    /**
+     * Returns nothing on purpose: the `@Policy` interceptor post-checks a method's return value and
+     * requires it to be a [dev.kviklet.kviklet.security.SecuredDomainObject], which a status object
+     * is not. A void method is invisible to that check, so the caller reads [status] separately.
+     *
+     * A failure is reported through [AnnotationSyncStatus.lastSyncError] rather than thrown: the
+     * admin asked to sync, and "the source is unreachable, here is the error, the previously synced
+     * annotations are still in force" is a more useful answer than a generic 500.
+     */
     @Policy(Permission.CONFIGURATION_EDIT)
-    fun syncNow(): AnnotationSyncStatus {
-        sync()
-        return status()
+    fun syncNow() {
+        try {
+            sync()
+        } catch (e: Exception) {
+            logger.warn("Manual table annotation sync failed", e)
+        }
     }
 
     @NoPolicy
